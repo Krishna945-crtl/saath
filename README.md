@@ -8,6 +8,8 @@ answers are revealed side by side with a score and a streak.
 
 Flutter app + Python (FastAPI) backend + SQLite.
 
+**Demo video:** _add link here_
+
 ---
 
 ## Why I built this
@@ -51,7 +53,7 @@ saath/
 │   │   ├── clock.py         "game day" in IST, rolls over at 4am
 │   │   ├── auth.py          bearer token dependency
 │   │   └── routers/         users, couples, games
-│   └── tests/               25 pytest tests
+│   └── tests/               pytest suite
 └── app/
     ├── lib/
     │   ├── api/             ApiClient + models
@@ -99,7 +101,13 @@ Questions seen in the last 14 days are skipped. It's deterministic per
 couple + day, so retries and second devices agree. This is the baseline any
 smarter (e.g. LLM-generated) game would need to beat.
 
-**7. What I deliberately skipped for the MVP.**
+**7. A partner can switch from their own unused code to the other's.**
+Found while testing with two browser windows: if both partners tapped
+"Get my invite code" first, joining failed with "you're already paired" and
+neither could pair. Now, if nobody has joined your code, it's deleted and you
+join your partner's instead. A user who is actually paired still gets a 409.
+
+**8. What I deliberately skipped for the MVP.**
 Real auth (OTP), push notifications, unpairing, migrations (Alembic), and
 Postgres. SQLite + `create_all` keeps setup to one command.
 
@@ -115,7 +123,8 @@ Postgres. SQLite + `create_all` keeps setup to one command.
 | Result | spinner | "Waiting for partner" | full-screen error | pull to refresh |
 
 Network errors and server errors show different messages, and raw server
-errors (500s) are never shown to the user.
+errors (500s) are never shown to the user. On a laptop the app stays in a
+480px column so the layout doesn't stretch edge to edge.
 
 ## Running it
 
@@ -123,45 +132,54 @@ errors (500s) are never shown to the user.
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
-pytest -q                                            # 25 passed
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+pytest -q
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 API docs: http://localhost:8000/docs
 
-### App
+### App (web)
 
 ```bash
 cd app
-flutter create . --project-name saath --platforms android,ios,web   # generates platform folders once
+flutter create . --project-name saath --platforms android,web   # once, generates platform folders
 flutter pub get
 flutter analyze
 flutter test
-
-# Android emulator (10.0.2.2 = your laptop):
-flutter run
-# Real phone on the same Wi-Fi:
-flutter run --dart-define=API_URL=http://<your-laptop-ip>:8000
-# Browser:
-flutter run -d chrome --dart-define=API_URL=http://localhost:8000
+flutter build web --dart-define=API_URL=http://localhost:8000
+cd build/web
+python -m http.server 5000
 ```
 
-> Android blocks plain `http://` in release builds. For local testing either use
-> a debug build, or add `android:usesCleartextTraffic="true"` to
+Open http://localhost:5000. Keep the backend and the web server running in
+two separate terminals.
+
+### App (Android)
+
+```bash
+flutter run                                                     # emulator (10.0.2.2 = your laptop)
+flutter run --dart-define=API_URL=http://<your-laptop-ip>:8000  # real phone on same Wi-Fi
+```
+
+> Android blocks plain `http://` in release builds. For local testing use a
+> debug build, or add `android:usesCleartextTraffic="true"` to
 > `android/app/src/main/AndroidManifest.xml`. A deployed backend should be HTTPS.
 
-To try it as a couple on one machine: run the app in Chrome **and** on the
-emulator, sign up as two people, pair them, and play.
+### Trying it as a couple on one laptop
+
+Open `localhost:5000` in a normal Chrome window **and** an Incognito window.
+Two normal tabs share the same saved login, so you'd be the same person in both.
 
 ## Testing
 
-**Backend (25 tests)** — pairing (idempotent create/join, case-insensitive code,
-third person blocked), game flow (same questions for both, frozen after likes
-change, hidden until both answer, exact scoring), retries (same payload OK,
-changed payload 409), validation, new-day cooldown, streak rules, 4am rollover,
-picker determinism and weighting.
+**Backend** — pairing (idempotent create/join, case-insensitive code, third
+person blocked), game flow (same questions for both, frozen after likes change,
+hidden until both answer, exact scoring), retries (same payload OK, changed
+payload 409), validation, new-day cooldown, streak rules, 4am rollover, picker
+determinism and weighting.
 
 Tests control "today" through a FastAPI dependency override, so streaks across
 several days run instantly without mocking `datetime`.
@@ -169,6 +187,8 @@ several days run instantly without mocking `datetime`.
 **App** — `ApiClient` against a mock HTTP client (token header, error parsing,
 timeouts, 404 → not paired), and widget tests for the error view (offline vs
 server, retry callback, no raw tracebacks).
+
+CI (GitHub Actions) runs `pytest`, `flutter analyze` and `flutter test` on every push.
 
 ## What I'd build next
 
@@ -178,12 +198,29 @@ server, retry callback, no raw tracebacks).
 2. Push notifications (FCM) when the partner finishes.
 3. Phone-number OTP instead of device-only tokens, so reinstalling doesn't lose
    the couple.
-4. A tiny "why did you pick that?" reply on each reveal card — the conversation
+4. Make the ✓/✗ on the reveal cards self-explanatory — right now the meaning
+   ("the other person guessed this right") is only in a footnote.
+5. A tiny "why did you pick that?" reply on each reveal card — the conversation
    is the product.
-5. Generated questions per couple, A/B tested against the weighted picker on
+6. Generated questions per couple, A/B tested against the weighted picker on
    the both-finished rate.
 
 ## How I used AI tools
 
-<!-- Fill this in honestly yourself — Kulfi asks candidates to disclose this. -->
-_Which tools, for which parts, and what you changed or verified by hand._
+I used Claude (Anthropic) as a pair programmer for this project.
+
+- **What AI did:** generated the first version of the FastAPI backend, the
+  Flutter app structure, the tests and this README from my requirements.
+- **What I did:** set up and ran everything locally on Windows (Python venv,
+  Flutter SDK, web build), ran the tests and the analyzer, and played the game
+  end to end as two users in separate browser windows.
+- **What I found and fixed while testing:**
+  - **Pairing bug:** if both partners tapped "Get my invite code", neither
+    could join the other. I changed the join logic so an unused code is
+    dropped (decision 7 above).
+  - **Desktop layout:** the form stretched edge to edge on a laptop. I limited
+    the app to a 480px column and refactored `main.dart` to reduce nesting.
+  - Fixed an analyzer warning (`unused_result` on `ref.refresh`) and removed
+    the default test file `flutter create` added.
+- **How I verified:** `pytest`, `flutter analyze`, `flutter test`, and manual
+  two-user testing.
