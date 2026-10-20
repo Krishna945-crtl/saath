@@ -8,7 +8,12 @@ answers are revealed side by side with a score and a streak.
 
 Flutter app + Python (FastAPI) backend + SQLite.
 
-**Demo video:** _add link here_
+**Live demo:** https://saath-kittu.netlify.app
+
+**Try it as a couple:** open the link in a normal window **and** an Incognito
+window, sign up as two people, share the invite code from one window, enter it in
+the other, and play. The backend runs on Render's free tier, so the first request
+can take up to a minute while the server wakes up.
 
 ---
 
@@ -32,7 +37,8 @@ getting a guess wrong ("you'd pick *beach*? since when?") starts a conversation.
 ## Architecture
 
 ```
-Flutter app (Riverpod)                FastAPI                       SQLite
+Flutter web app (Riverpod)            FastAPI                       SQLite
+on Netlify                            on Render
 ┌──────────────────────┐   HTTPS   ┌──────────────────────┐   ┌─────────────┐
 │ RootGate             │──────────▶│ /users  /me/likes    │──▶│ users       │
 │  ├ Onboarding        │           │ /couples /join       │   │ couples     │
@@ -126,7 +132,17 @@ Network errors and server errors show different messages, and raw server
 errors (500s) are never shown to the user. On a laptop the app stays in a
 480px column so the layout doesn't stretch edge to edge.
 
-## Running it
+## Deployment
+
+| Part | Host | Notes |
+|---|---|---|
+| Backend (FastAPI) | Render (free) | Root `backend`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Sleeps when idle. |
+| Web app (Flutter) | Netlify | `flutter build web --dart-define=API_URL=<render url>`, then upload `build/web`. |
+
+On the free tier the SQLite file can be reset when the server restarts, so demo
+accounts may disappear — just sign up again. A real launch would move to Postgres.
+
+## Running it locally
 
 ### Backend
 
@@ -165,13 +181,7 @@ flutter run --dart-define=API_URL=http://<your-laptop-ip>:8000  # real phone on 
 ```
 
 > Android blocks plain `http://` in release builds. For local testing use a
-> debug build, or add `android:usesCleartextTraffic="true"` to
-> `android/app/src/main/AndroidManifest.xml`. A deployed backend should be HTTPS.
-
-### Trying it as a couple on one laptop
-
-Open `localhost:5000` in a normal Chrome window **and** an Incognito window.
-Two normal tabs share the same saved login, so you'd be the same person in both.
+> debug build, or point `API_URL` at the HTTPS Render backend.
 
 ## Testing
 
@@ -212,8 +222,9 @@ I used Claude (Anthropic) as a pair programmer for this project.
 - **What AI did:** generated the first version of the FastAPI backend, the
   Flutter app structure, the tests and this README from my requirements.
 - **What I did:** set up and ran everything locally on Windows (Python venv,
-  Flutter SDK, web build), ran the tests and the analyzer, and played the game
-  end to end as two users in separate browser windows.
+  Flutter SDK, web build), ran the tests and the analyzer, played the game end
+  to end as two users in separate browser windows, and deployed it (Render +
+  Netlify).
 - **What I found and fixed while testing:**
   - **Pairing bug:** if both partners tapped "Get my invite code", neither
     could join the other. I changed the join logic so an unused code is
@@ -223,4 +234,4 @@ I used Claude (Anthropic) as a pair programmer for this project.
   - Fixed an analyzer warning (`unused_result` on `ref.refresh`) and removed
     the default test file `flutter create` added.
 - **How I verified:** `pytest`, `flutter analyze`, `flutter test`, and manual
-  two-user testing.
+  two-user testing locally and on the live deployment.
